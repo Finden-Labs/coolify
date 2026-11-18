@@ -4,6 +4,7 @@ namespace App\Services\SecretManagers;
 
 use App\Models\IntegrationToken;
 use App\Models\SecretManagerLink;
+use App\Services\AwsSecretsManagerService;
 use App\Support\ValidationPatterns;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Builder;
@@ -66,6 +67,9 @@ class ResourceSecretManager
             'vault' => [
                 'settings.mount' => ['required', 'string'],
                 'settings.path' => ['required', 'string'],
+            ],
+            'aws_secrets_manager' => [
+                'settings.secret_id' => ['required', 'string', 'regex:'.AwsSecretsManagerService::SECRET_ID_PATTERN],
             ],
             default => [],
         };

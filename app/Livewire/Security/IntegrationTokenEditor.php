@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Security;
 
+use App\Actions\IntegrationToken\CreateIntegrationToken;
 use App\Actions\IntegrationToken\UpdateIntegrationToken;
 use App\Models\IntegrationToken;
 use App\Services\Dns\CloudflareDnsProvider;
@@ -62,7 +63,7 @@ class IntegrationTokenEditor extends Component
 
     protected function rules(): array
     {
-        $rules = UpdateIntegrationToken::rules($this->integrationToken->provider);
+        $rules = UpdateIntegrationToken::rules($this->integrationToken->provider, (int) $this->integrationToken->team_id);
         $rules['newToken'] = $rules['token'];
         unset($rules['name'], $rules['token']);
 
@@ -77,7 +78,15 @@ class IntegrationTokenEditor extends Component
         return [
             'capabilities.required' => 'Select at least one capability.',
             'capabilities.min' => 'Select at least one capability.',
-        ];
+        ] + CreateIntegrationToken::messages($this->integrationToken->provider);
+    }
+
+    /**
+     * Whether the team of the token may use the AWS credentials of the Coolify host.
+     */
+    public function getCanUseAwsHostCredentialsProperty(): bool
+    {
+        return IntegrationToken::mayUseAwsHostCredentials((int) $this->integrationToken->team_id);
     }
 
     public function save(IntegrationTokenValidator $validator): void
@@ -97,7 +106,9 @@ class IntegrationTokenEditor extends Component
                 'ui',
             );
         } catch (ValidationException $e) {
-            $this->addError('newToken', $e->validator->errors()->first('token'));
+            foreach ($e->validator->errors()->messages() as $field => $messages) {
+                $this->addError($field === 'token' ? 'newToken' : $field, $messages[0]);
+            }
 
             return;
         } catch (ConnectionException) {

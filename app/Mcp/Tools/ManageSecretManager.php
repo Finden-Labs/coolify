@@ -11,7 +11,7 @@ class ManageSecretManager extends RestActionTool
 {
     protected string $name = 'manage_secret_manager';
 
-    protected string $description = 'Show, set, or remove the secret manager source (Doppler, Infisical, Vault) of an application, service, or database, list the key names of its secrets, and add {{vault.KEY}} reference variables. Secret values are never returned. Requires read ability for get, write ability for changes and keys. Same validation and permissions as the REST API.';
+    protected string $description = 'Show, set, or remove the secret manager source (Doppler, Infisical, Vault, AWS Secrets Manager) of an application, service, or database, list the key names of its secrets, and add {{vault.KEY}} reference variables. Secret values are never returned. Requires read ability for get, write ability for changes and keys. Same validation and permissions as the REST API.';
 
     protected function actions(): array
     {

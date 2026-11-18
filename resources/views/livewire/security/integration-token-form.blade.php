@@ -5,6 +5,7 @@
             ['value' => 'doppler', 'label' => 'Doppler'],
             ['value' => 'infisical', 'label' => 'Infisical'],
             ['value' => 'vault', 'label' => 'HashiCorp Vault'],
+            ['value' => 'aws_secrets_manager', 'label' => 'AWS Secrets Manager'],
         ]" />
 
         @if ($provider === 'infisical')
@@ -19,6 +20,26 @@
                     helper="Use the URL of your self-hosted Infisical instance, or the Infisical cloud URL." />
                 <x-forms.input type="number" min="1" max="300" id="metadata.timeout" label="Request timeout (optional)"
                     placeholder="10" helper="Seconds to wait for each request. Increase it if your instance responds slowly." />
+            </div>
+        @elseif ($provider === 'aws_secrets_manager')
+            <div class="grid gap-4 lg:grid-cols-2">
+                <x-forms.input required id="name" label="Token name" placeholder="Production secrets" />
+                <x-forms.input required id="metadata.region" label="Region" placeholder="us-east-1"
+                    helper="The region of your secrets." />
+                @if ($this->canUseAwsHostCredentials)
+                    <x-forms.listbox id="metadata.credential_source" label="Credentials" :live="true" :options="[
+                        ['value' => 'access_key', 'label' => 'Access key'],
+                        ['value' => 'host', 'label' => 'Credentials of the Coolify host (IAM role)'],
+                    ]" />
+                @endif
+                @if (data_get($metadata, 'credential_source') !== 'host')
+                    <x-forms.input required id="metadata.access_key_id" label="Access key ID"
+                        placeholder="AKIAIOSFODNN7EXAMPLE" />
+                    <x-forms.input required type="password" id="token" label="Secret access key"
+                        placeholder="Paste the secret access key" />
+                @endif
+                <x-forms.input type="number" min="1" max="300" id="metadata.timeout" label="Request timeout (optional)"
+                    placeholder="10" helper="Seconds to wait for each request." />
             </div>
         @else
             <div class="grid gap-4 lg:grid-cols-2">
@@ -127,6 +148,23 @@
                     deployments fail when the token expires.</p>
                 <a href="https://portal.cloud.hashicorp.com?ref=coolify.io" target="_blank" rel="noopener noreferrer" class="button mt-2">
                     Open HCP Vault
+                    <x-external-link />
+                </a>
+            </div>
+        @elseif ($provider === 'aws_secrets_manager')
+            <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-[11px] leading-5 text-neutral-600 dark:border-white/[0.08] dark:bg-white/[0.025] dark:text-fg-dim">
+                <div class="font-medium text-black dark:text-fg">Required IAM permissions</div>
+                <ul class="list-inside list-disc">
+                    <li><code>secretsmanager:GetSecretValue</code> on the secrets that Coolify reads</li>
+                    <li><code>kms:Decrypt</code> when a secret uses a customer managed KMS key</li>
+                </ul>
+                <p>Store each secret as key/value pairs. A resource reads one secret.</p>
+                @if (data_get($metadata, 'credential_source') === 'host')
+                    <p class="mt-2">Coolify uses the AWS credentials of its host, such as the IAM role of the EC2
+                        instance. Coolify runs in a container, so set the instance metadata hop limit of the instance to 2.</p>
+                @endif
+                <a href="https://console.aws.amazon.com/secretsmanager/" target="_blank" rel="noopener noreferrer" class="button mt-2">
+                    Open AWS Secrets Manager
                     <x-external-link />
                 </a>
             </div>

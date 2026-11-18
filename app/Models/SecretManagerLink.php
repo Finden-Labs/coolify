@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\AwsSecretsManagerService;
 use App\Services\DopplerService;
 use App\Services\InfisicalService;
 use App\Services\VaultService;
@@ -78,6 +79,8 @@ class SecretManagerLink extends BaseModel
                 (string) data_get($settings, 'mount', 'secret'),
                 (string) data_get($settings, 'path'),
             ),
+            'aws_secrets_manager' => AwsSecretsManagerService::forTeam((int) $token->team_id, (string) $token->token, $metadata)
+                ->fetchSecrets((string) data_get($settings, 'secret_id')),
             default => throw new \RuntimeException("Unsupported secret manager provider [{$token->provider}]."),
         };
     }
@@ -134,6 +137,7 @@ class SecretManagerLink extends BaseModel
             ])), '/') ?: 'token scope',
             'infisical' => data_get($settings, 'project_id').'/'.data_get($settings, 'environment').data_get($settings, 'secret_path', '/'),
             'vault' => data_get($settings, 'mount', 'secret').'/'.data_get($settings, 'path'),
+            'aws_secrets_manager' => (string) data_get($settings, 'secret_id'),
             default => '',
         };
     }

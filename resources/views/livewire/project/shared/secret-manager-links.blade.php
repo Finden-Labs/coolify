@@ -8,7 +8,7 @@
         @if (! $link && $availableTokens->isEmpty())
             @can('viewAny', \App\Models\IntegrationToken::class)
                 <x-empty title="No secret manager tokens"
-                    description="Add a Doppler, Infisical, or HashiCorp Vault token first."
+                    description="Add a Doppler, Infisical, HashiCorp Vault, or AWS Secrets Manager token first."
                     icon-name="keys" size="sm">
                     <x-slot:actions>
                         <a class="button" href="{{ route('security.integration-tokens') }}" {{ wireNavigate() }}>
@@ -70,6 +70,10 @@
                                 <x-forms.input required id="settings.path" label="Secret path"
                                     placeholder="my-app/production" canGate="useTeamCredentials" :canResource="$resource" wire:blur="saveSettings" />
                             </div>
+                        @elseif ($selectedToken?->provider === 'aws_secrets_manager')
+                            <x-forms.input required id="settings.secret_id" label="Secret name or ARN"
+                                placeholder="prod/my-app" helper="The secret must be in the region of the token and hold key/value pairs."
+                                canGate="useTeamCredentials" :canResource="$resource" wire:blur="saveSettings" />
                         @endif
 
                         <div class="flex flex-col gap-3">

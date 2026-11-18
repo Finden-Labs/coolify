@@ -9,7 +9,10 @@ use App\Models\IntegrationToken;
  */
 class IntegrationTokenValidator
 {
-    public function validate(string $provider, string $token, array $capabilities, array $metadata = []): bool
+    /**
+     * @param  int|null  $teamId  The team that owns the token. Without it, AWS host credentials are refused.
+     */
+    public function validate(string $provider, #[\SensitiveParameter] string $token, array $capabilities, array $metadata = [], ?int $teamId = null): bool
     {
         return match ($provider) {
             'cloudflare' => app(CloudflareTokenValidator::class)->validate($token, $capabilities),
@@ -26,8 +29,21 @@ class IntegrationTokenValidator
                 data_get($metadata, 'namespace'),
                 IntegrationToken::requestTimeout($metadata),
             ))->validate(),
+            'aws_secrets_manager' => $this->validateAws($teamId, $token, $metadata),
             default => false,
         };
+    }
+
+    /**
+     * @param  array<string, mixed>  $metadata
+     */
+    private function validateAws(?int $teamId, #[\SensitiveParameter] string $token, array $metadata): bool
+    {
+        try {
+            return AwsSecretsManagerService::forTeam($teamId ?? -1, $token, $metadata)->validate();
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     public function errorMessage(string $provider): string
@@ -37,6 +53,7 @@ class IntegrationTokenValidator
             'doppler' => 'The Doppler token could not be verified. Check the token and its access.',
             'infisical' => 'Infisical login failed. Check the base URL, the client ID, and the client secret.',
             'vault' => 'The Vault token could not be verified. Check the base URL, the namespace, and the token.',
+            'aws_secrets_manager' => 'The AWS credentials could not be verified. Check the region and the access key. For host credentials, check that the Coolify host has an IAM role and that the Coolify container can reach the instance metadata service.',
             default => 'The token could not be verified.',
         };
     }

@@ -22,7 +22,7 @@ use RuntimeException;
     properties: [
         new OA\Property(property: 'uuid', type: 'string'),
         new OA\Property(property: 'name', type: 'string'),
-        new OA\Property(property: 'provider', type: 'string', enum: ['cloudflare', 'doppler', 'infisical', 'vault']),
+        new OA\Property(property: 'provider', type: 'string', enum: ['cloudflare', 'doppler', 'infisical', 'vault', 'aws_secrets_manager']),
         new OA\Property(property: 'capabilities', type: 'array', items: new OA\Items(type: 'string', enum: ['dns', 'tunnel', 'secrets'])),
         new OA\Property(property: 'automatic_dns', type: 'boolean', description: 'Cloudflare only. Create DNS records when a domain is added.'),
         new OA\Property(property: 'proxied_dns', type: 'boolean', description: 'Cloudflare only. Create new records proxied (orange cloud).'),
@@ -92,7 +92,7 @@ class IntegrationTokensController extends Controller
 
     #[OA\Post(
         summary: 'Create Integration Token',
-        description: 'Create and validate a Cloudflare, Doppler, Infisical, or Vault integration token. A Cloudflare token also gets its DNS zones; it is not stored when the zones cannot be read. Requires admin or owner.',
+        description: 'Create and validate a Cloudflare, Doppler, Infisical, Vault, or AWS Secrets Manager integration token. A Cloudflare token also gets its DNS zones; it is not stored when the zones cannot be read. Requires admin or owner.',
         path: '/security/integration-tokens',
         operationId: 'create-secret-manager-integration-token',
         security: [['bearerAuth' => []]],
@@ -100,15 +100,15 @@ class IntegrationTokensController extends Controller
         requestBody: new OA\RequestBody(
             required: true,
             content: new OA\JsonContent(
-                required: ['provider', 'name', 'token'],
+                required: ['provider', 'name'],
                 properties: [
-                    new OA\Property(property: 'provider', type: 'string', enum: ['cloudflare', 'doppler', 'infisical', 'vault']),
+                    new OA\Property(property: 'provider', type: 'string', enum: ['cloudflare', 'doppler', 'infisical', 'vault', 'aws_secrets_manager']),
                     new OA\Property(property: 'name', type: 'string'),
-                    new OA\Property(property: 'token', type: 'string'),
+                    new OA\Property(property: 'token', type: 'string', description: 'The secret. Required, except for AWS Secrets Manager with credential_source host. AWS Secrets Manager: the secret access key.'),
                     new OA\Property(property: 'capabilities', type: 'array', items: new OA\Items(type: 'string', enum: ['dns', 'tunnel', 'secrets']), description: 'Cloudflare: dns, tunnel (tunnel needs dns). Default: dns. Secret managers: secrets.'),
                     new OA\Property(property: 'automatic_dns', type: 'boolean', description: 'Cloudflare only. Create DNS records when a domain is added. Default: true.'),
                     new OA\Property(property: 'proxied_dns', type: 'boolean', description: 'Cloudflare only. Create new records proxied (orange cloud). Default: false.'),
-                    new OA\Property(property: 'metadata', type: 'object', description: 'Secret managers only: base_url, client_id (Infisical), namespace (Vault), timeout.'),
+                    new OA\Property(property: 'metadata', type: 'object', description: 'Secret managers only: base_url, client_id (Infisical), namespace (Vault), region, credential_source (access_key, or host for the AWS credentials of the Coolify host; root team only), access_key_id (AWS Secrets Manager), timeout.'),
                 ],
             ),
         ),
@@ -140,13 +140,13 @@ class IntegrationTokensController extends Controller
         $isCloudflare = $provider === 'cloudflare';
         $body['capabilities'] ??= $isCloudflare ? ['dns'] : ['secrets'];
 
-        $rules = CreateIntegrationToken::rules($provider) + [
+        $rules = CreateIntegrationToken::rules($provider, (int) $teamId) + [
             'metadata' => $isCloudflare ? ['prohibited'] : ['sometimes', 'array'],
             'automatic_dns' => $isCloudflare ? ['sometimes', 'boolean'] : ['prohibited'],
             'proxied_dns' => $isCloudflare ? ['sometimes', 'boolean'] : ['prohibited'],
         ];
 
-        $validator = customApiValidator($body, $rules);
+        $validator = customApiValidator($body, $rules, CreateIntegrationToken::messages($provider));
         $extraFields = array_diff(array_keys($body), ['provider', 'name', 'token', 'capabilities', 'automatic_dns', 'proxied_dns', 'metadata']);
 
         if ($validator->fails() || $extraFields !== []) {
@@ -165,12 +165,14 @@ class IntegrationTokensController extends Controller
                 (int) $teamId,
                 $validated['provider'],
                 $validated['name'],
-                $validated['token'],
+                $validated['token'] ?? '',
                 array_values(array_unique($validated['capabilities'])),
                 $validated['metadata'] ?? [],
                 $validated['automatic_dns'] ?? true,
                 $validated['proxied_dns'] ?? false,
             );
+        } catch (ValidationException $e) {
+            return response()->json(['message' => 'Validation failed.', 'errors' => $e->errors()], 422);
         } catch (ConnectionException) {
             return $this->connectionErrorResponse($validated['provider']);
         } catch (RuntimeException $e) {
@@ -201,11 +203,11 @@ class IntegrationTokensController extends Controller
             content: new OA\JsonContent(
                 properties: [
                     new OA\Property(property: 'name', type: 'string'),
-                    new OA\Property(property: 'token', type: 'string', description: 'New secret. Required when base_url, client_id (Infisical), or namespace (Vault) changes.'),
+                    new OA\Property(property: 'token', type: 'string', description: 'New secret. Required when base_url, client_id (Infisical), namespace (Vault), or access_key_id (AWS Secrets Manager) changes, and when an AWS Secrets Manager token switches to credential_source access_key.'),
                     new OA\Property(property: 'capabilities', type: 'array', items: new OA\Items(type: 'string', enum: ['dns', 'tunnel', 'secrets'])),
                     new OA\Property(property: 'automatic_dns', type: 'boolean', description: 'Cloudflare only.'),
                     new OA\Property(property: 'proxied_dns', type: 'boolean', description: 'Cloudflare only.'),
-                    new OA\Property(property: 'metadata', type: 'object', description: 'Secret managers only. Fields to change: base_url, client_id, namespace, timeout. An empty value removes a field.'),
+                    new OA\Property(property: 'metadata', type: 'object', description: 'Secret managers only. Fields to change: base_url, client_id, namespace, region, credential_source, access_key_id, timeout. An empty value removes a field.'),
                 ],
             ),
         ),
@@ -243,8 +245,8 @@ class IntegrationTokensController extends Controller
             'metadata' => is_array($body['metadata'] ?? null) ? array_merge($storedMetadata, $body['metadata']) : $storedMetadata,
         ];
 
-        $rules = UpdateIntegrationToken::rules($token->provider);
-        $validator = customApiValidator($merged, $rules);
+        $rules = UpdateIntegrationToken::rules($token->provider, (int) $token->team_id);
+        $validator = customApiValidator($merged, $rules, CreateIntegrationToken::messages($token->provider));
         $flags = customApiValidator($body, [
             'metadata' => $isCloudflare ? ['prohibited'] : ['sometimes', 'array'],
             'automatic_dns' => $isCloudflare ? ['sometimes', 'boolean'] : ['prohibited'],

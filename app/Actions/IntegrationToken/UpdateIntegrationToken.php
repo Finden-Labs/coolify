@@ -27,11 +27,12 @@ class UpdateIntegrationToken
     /**
      * Validation rules for an update. `token` is the new secret and is optional.
      *
+     * @param  int|null  $teamId  The team that owns the token. Only the root team may select AWS host credentials.
      * @return array<string, array<int, mixed>>
      */
-    public static function rules(string $provider): array
+    public static function rules(string $provider, ?int $teamId = null): array
     {
-        $rules = CreateIntegrationToken::rules($provider);
+        $rules = CreateIntegrationToken::rules($provider, $teamId);
         unset($rules['provider']);
         $rules['token'][0] = 'nullable';
 
@@ -42,13 +43,14 @@ class UpdateIntegrationToken
      * @param  array<int, string>  $capabilities
      * @param  array<string, mixed>  $metadata  The complete provider settings; empty values are dropped.
      *
-     * @throws ValidationException when a connection setting changes without a new secret
+     * @throws ValidationException when a connection setting changes without a new secret, or a team other than the
+     *                             root team selects AWS host credentials
      * @throws RuntimeException when the provider rejects the token or Cloudflare zones cannot be read
      */
     public function handle(
         IntegrationToken $integrationToken,
         string $name,
-        ?string $newToken,
+        #[\SensitiveParameter] ?string $newToken,
         array $capabilities,
         array $metadata,
         bool $automaticDns,
@@ -58,6 +60,16 @@ class UpdateIntegrationToken
         $provider = $integrationToken->provider;
         $newToken = filled($newToken) ? $newToken : null;
         $metadata = array_filter($metadata, fn ($value) => filled($value));
+        // Host credentials need no secret: a stored access key is removed, and a pasted one is ignored.
+        $usesAwsHostCredentials = false;
+        if ($provider === 'aws_secrets_manager') {
+            $metadata = CreateIntegrationToken::normalizeAwsMetadata($metadata);
+            CreateIntegrationToken::ensureAwsHostCredentialsAllowed($provider, $metadata, (int) $integrationToken->team_id);
+            $usesAwsHostCredentials = IntegrationToken::usesAwsHostCredentials($metadata);
+            if ($usesAwsHostCredentials) {
+                $newToken = null;
+            }
+        }
         if ($provider === 'cloudflare') {
             // Cloudflare has no user settings in metadata; keep system keys such as zones_synced_at.
             $metadata = $integrationToken->metadata ?? [];
@@ -72,20 +84,23 @@ class UpdateIntegrationToken
 
         $storedMetadata = $integrationToken->metadata ?? [];
         $changedConnectionFields = $this->changedConnectionFields($provider, $storedMetadata, $metadata);
-        if ($changedConnectionFields !== [] && $newToken === null) {
+        if ($changedConnectionFields !== [] && $newToken === null && ! $usesAwsHostCredentials) {
             throw ValidationException::withMessages(['token' => $this->reenterSecretMessage($provider)]);
         }
         $capabilitiesChanged = collect($capabilities)->sort()->values()->all()
             !== collect($integrationToken->capabilities)->sort()->values()->all();
+        $secret = $usesAwsHostCredentials ? '' : ($newToken ?? $integrationToken->token);
 
         if (($newToken !== null || $capabilitiesChanged || $metadata != $storedMetadata)
-            && ! $this->validator->validate($provider, $newToken ?? $integrationToken->token, $capabilities, $metadata)) {
+            && ! $this->validator->validate($provider, $secret, $capabilities, $metadata, (int) $integrationToken->team_id)) {
             throw new RuntimeException($this->validator->errorMessage($provider));
         }
 
         $updates = ['name' => $name, 'capabilities' => $capabilities, 'metadata' => $metadata ?: null];
         if ($newToken !== null) {
             $updates['token'] = $newToken;
+        } elseif ($usesAwsHostCredentials && $integrationToken->token !== '') {
+            $updates['token'] = '';
         }
 
         DB::transaction(function () use ($integrationToken, $updates, $provider, $newToken, $capabilitiesChanged): void {
@@ -129,6 +144,8 @@ class UpdateIntegrationToken
         return match ($provider) {
             'vault' => ['base_url', 'namespace'],
             'infisical' => ['base_url', 'client_id'],
+            // The region is not listed: the endpoint is always an AWS host, so a region change cannot send the key elsewhere.
+            'aws_secrets_manager' => ['credential_source', 'access_key_id'],
             default => [],
         };
     }
@@ -151,6 +168,7 @@ class UpdateIntegrationToken
         return match ($provider) {
             'infisical' => 'Enter the client secret again when you change the base URL or the client ID.',
             'vault' => 'Enter the token again when you change the base URL or the namespace.',
+            'aws_secrets_manager' => 'Enter the secret access key again when you change the access key ID or switch to an access key.',
             default => 'Enter the token again when you change the connection settings.',
         };
     }

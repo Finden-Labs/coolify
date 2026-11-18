@@ -14922,7 +14922,7 @@
                     "Integration Tokens"
                 ],
                 "summary": "Create Integration Token",
-                "description": "Create and validate a Cloudflare, Doppler, Infisical, or Vault integration token. A Cloudflare token also gets its DNS zones; it is not stored when the zones cannot be read. Requires admin or owner.",
+                "description": "Create and validate a Cloudflare, Doppler, Infisical, Vault, or AWS Secrets Manager integration token. A Cloudflare token also gets its DNS zones; it is not stored when the zones cannot be read. Requires admin or owner.",
                 "operationId": "create-secret-manager-integration-token",
                 "requestBody": {
                     "required": true,
@@ -14931,8 +14931,7 @@
                             "schema": {
                                 "required": [
                                     "provider",
-                                    "name",
-                                    "token"
+                                    "name"
                                 ],
                                 "properties": {
                                     "provider": {
@@ -14941,13 +14940,15 @@
                                             "cloudflare",
                                             "doppler",
                                             "infisical",
-                                            "vault"
+                                            "vault",
+                                            "aws_secrets_manager"
                                         ]
                                     },
                                     "name": {
                                         "type": "string"
                                     },
                                     "token": {
+                                        "description": "The secret. Required, except for AWS Secrets Manager with credential_source host. AWS Secrets Manager: the secret access key.",
                                         "type": "string"
                                     },
                                     "capabilities": {
@@ -14971,7 +14972,7 @@
                                         "type": "boolean"
                                     },
                                     "metadata": {
-                                        "description": "Secret managers only: base_url, client_id (Infisical), namespace (Vault), timeout.",
+                                        "description": "Secret managers only: base_url, client_id (Infisical), namespace (Vault), region, credential_source (access_key, or host for the AWS credentials of the Coolify host; root team only), access_key_id (AWS Secrets Manager), timeout.",
                                         "type": "object"
                                     }
                                 },
@@ -15146,7 +15147,7 @@
                                         "type": "string"
                                     },
                                     "token": {
-                                        "description": "New secret. Required when base_url, client_id (Infisical), or namespace (Vault) changes.",
+                                        "description": "New secret. Required when base_url, client_id (Infisical), namespace (Vault), or access_key_id (AWS Secrets Manager) changes, and when an AWS Secrets Manager token switches to credential_source access_key.",
                                         "type": "string"
                                     },
                                     "capabilities": {
@@ -15169,7 +15170,7 @@
                                         "type": "boolean"
                                     },
                                     "metadata": {
-                                        "description": "Secret managers only. Fields to change: base_url, client_id, namespace, timeout. An empty value removes a field.",
+                                        "description": "Secret managers only. Fields to change: base_url, client_id, namespace, region, credential_source, access_key_id, timeout. An empty value removes a field.",
                                         "type": "object"
                                     }
                                 },
@@ -18043,7 +18044,7 @@
                                         "type": "string"
                                     },
                                     "settings": {
-                                        "description": "Doppler service account: project, config. Infisical: project_id, environment, secret_path. Vault: mount, path.",
+                                        "description": "Doppler service account: project, config. Infisical: project_id, environment, secret_path. Vault: mount, path. AWS Secrets Manager: secret_id.",
                                         "type": "object"
                                     }
                                 },
@@ -28273,7 +28274,8 @@
                             "cloudflare",
                             "doppler",
                             "infisical",
-                            "vault"
+                            "vault",
+                            "aws_secrets_manager"
                         ]
                     },
                     "capabilities": {
@@ -28336,11 +28338,12 @@
                             "doppler",
                             "infisical",
                             "vault",
+                            "aws_secrets_manager",
                             null
                         ]
                     },
                     "settings": {
-                        "description": "Doppler: project, config. Infisical: project_id, environment, secret_path. Vault: mount, path.",
+                        "description": "Doppler: project, config. Infisical: project_id, environment, secret_path. Vault: mount, path. AWS Secrets Manager: secret_id.",
                         "type": [
                             "object",
                             "null"

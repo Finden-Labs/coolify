@@ -10,14 +10,21 @@ class IntegrationToken extends BaseModel
 {
     use HasFactory;
 
-    public const SECRET_MANAGER_PROVIDERS = ['doppler', 'infisical', 'vault'];
+    public const SECRET_MANAGER_PROVIDERS = ['doppler', 'infisical', 'vault', 'aws_secrets_manager'];
 
     public const PROVIDER_NAMES = [
         'cloudflare' => 'Cloudflare',
         'doppler' => 'Doppler',
         'infisical' => 'Infisical',
         'vault' => 'HashiCorp Vault',
+        'aws_secrets_manager' => 'AWS Secrets Manager',
     ];
+
+    /** AWS Secrets Manager reads with the access key stored in the token. */
+    public const AWS_CREDENTIAL_SOURCE_ACCESS_KEY = 'access_key';
+
+    /** AWS Secrets Manager reads with the credentials of the Coolify host, such as the IAM role of an EC2 instance. */
+    public const AWS_CREDENTIAL_SOURCE_HOST = 'host';
 
     protected $fillable = [
         'team_id',
@@ -146,6 +153,25 @@ class IntegrationToken extends BaseModel
     public static function requestTimeout(array $metadata): ?int
     {
         return filled($metadata['timeout'] ?? null) ? (int) $metadata['timeout'] : null;
+    }
+
+    /**
+     * Whether AWS settings select the credentials of the Coolify host instead of an access key.
+     *
+     * @param  array<string, mixed>|null  $metadata
+     */
+    public static function usesAwsHostCredentials(?array $metadata): bool
+    {
+        return data_get($metadata, 'credential_source') === self::AWS_CREDENTIAL_SOURCE_HOST;
+    }
+
+    /**
+     * The credentials of the Coolify host belong to the instance, so only the root team (instance admins) can use
+     * them. Any other team would read secrets with an IAM role that it does not control.
+     */
+    public static function mayUseAwsHostCredentials(int $teamId): bool
+    {
+        return $teamId === 0;
     }
 
     public function dopplerTokenType(): ?string

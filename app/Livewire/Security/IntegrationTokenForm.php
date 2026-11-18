@@ -43,10 +43,20 @@ class IntegrationTokenForm extends Component
             $this->proxiedDns = false;
         } else {
             $this->capabilities = ['secrets'];
-            $this->metadata = $this->provider === 'infisical'
-                ? ['base_url' => 'https://app.infisical.com']
-                : [];
+            $this->metadata = match ($this->provider) {
+                'infisical' => ['base_url' => 'https://app.infisical.com'],
+                'aws_secrets_manager' => ['credential_source' => IntegrationToken::AWS_CREDENTIAL_SOURCE_ACCESS_KEY],
+                default => [],
+            };
         }
+    }
+
+    /**
+     * Whether the team that gets the token may use the AWS credentials of the Coolify host.
+     */
+    public function getCanUseAwsHostCredentialsProperty(): bool
+    {
+        return IntegrationToken::mayUseAwsHostCredentials((int) currentTeam()->id);
     }
 
     /**
@@ -61,7 +71,7 @@ class IntegrationTokenForm extends Component
 
     protected function rules(): array
     {
-        return CreateIntegrationToken::rules($this->provider) + [
+        return CreateIntegrationToken::rules($this->provider, (int) currentTeam()->id) + [
             'automaticDns' => ['boolean'],
             'proxiedDns' => ['boolean'],
         ];
@@ -73,7 +83,7 @@ class IntegrationTokenForm extends Component
             'capabilities.required' => 'Select at least one capability.',
             'capabilities.min' => 'Select at least one capability.',
             'token.regex' => 'Use a Doppler service token (dp.st.*) or service account token (dp.sa.*).',
-        ];
+        ] + CreateIntegrationToken::messages($this->provider);
     }
 
     public function addToken(IntegrationTokenValidator $validator): void
@@ -87,7 +97,7 @@ class IntegrationTokenForm extends Component
                 currentTeam()->id,
                 $validated['provider'],
                 $validated['name'],
-                $validated['token'],
+                $validated['token'] ?? '',
                 $validated['capabilities'],
                 data_get($validated, 'metadata', []),
                 $validated['automaticDns'],

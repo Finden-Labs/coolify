@@ -24,8 +24,8 @@ use Throwable;
     properties: [
         new OA\Property(property: 'linked', type: 'boolean'),
         new OA\Property(property: 'integration_token_uuid', type: 'string', nullable: true),
-        new OA\Property(property: 'provider', type: 'string', nullable: true, enum: ['doppler', 'infisical', 'vault', null]),
-        new OA\Property(property: 'settings', type: 'object', nullable: true, description: 'Doppler: project, config. Infisical: project_id, environment, secret_path. Vault: mount, path.'),
+        new OA\Property(property: 'provider', type: 'string', nullable: true, enum: ['doppler', 'infisical', 'vault', 'aws_secrets_manager', null]),
+        new OA\Property(property: 'settings', type: 'object', nullable: true, description: 'Doppler: project, config. Infisical: project_id, environment, secret_path. Vault: mount, path. AWS Secrets Manager: secret_id.'),
         new OA\Property(property: 'available_tokens', type: 'array', items: new OA\Items(type: 'object', properties: [
             new OA\Property(property: 'uuid', type: 'string'),
             new OA\Property(property: 'name', type: 'string'),
@@ -76,7 +76,7 @@ class SecretManagerController extends Controller
                 required: ['integration_token_uuid'],
                 properties: [
                     new OA\Property(property: 'integration_token_uuid', type: 'string'),
-                    new OA\Property(property: 'settings', type: 'object', description: 'Doppler service account: project, config. Infisical: project_id, environment, secret_path. Vault: mount, path.'),
+                    new OA\Property(property: 'settings', type: 'object', description: 'Doppler service account: project, config. Infisical: project_id, environment, secret_path. Vault: mount, path. AWS Secrets Manager: secret_id.'),
                 ],
             ),
         ),

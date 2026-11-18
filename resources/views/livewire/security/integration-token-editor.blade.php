@@ -3,16 +3,23 @@
         <div class="grid gap-4 lg:grid-cols-2">
             <x-forms.input required id="name" label="Token name" />
             <x-forms.input readonly label="Provider" value="{{ $integrationToken->providerName() }}" />
-            <div class="lg:col-span-2">
-                <x-forms.input type="password" id="newToken"
-                    label="{{ $integrationToken->provider === 'infisical' ? 'New client secret' : 'New API token' }}"
-                    placeholder="Leave blank to keep the current token"
-                    helper="{{ match ($integrationToken->provider) {
-                        'infisical' => 'Paste a replacement client secret to rotate this credential. Required when you change the base URL or the client ID.',
-                        'vault' => 'Paste a replacement token to rotate this credential. Required when you change the base URL or the namespace.',
-                        default => 'Paste a replacement token to rotate this credential.',
-                    } }}" />
-            </div>
+            @unless ($integrationToken->provider === 'aws_secrets_manager' && data_get($metadata, 'credential_source') === 'host')
+                <div class="lg:col-span-2">
+                    <x-forms.input type="password" id="newToken"
+                        label="{{ match ($integrationToken->provider) {
+                            'infisical' => 'New client secret',
+                            'aws_secrets_manager' => 'New secret access key',
+                            default => 'New API token',
+                        } }}"
+                        placeholder="Leave blank to keep the current token"
+                        helper="{{ match ($integrationToken->provider) {
+                            'infisical' => 'Paste a replacement client secret to rotate this credential. Required when you change the base URL or the client ID.',
+                            'vault' => 'Paste a replacement token to rotate this credential. Required when you change the base URL or the namespace.',
+                            'aws_secrets_manager' => 'Paste a replacement secret access key to rotate this credential. Required when you change the access key ID or switch to an access key.',
+                            default => 'Paste a replacement token to rotate this credential.',
+                        } }}" />
+                </div>
+            @endunless
         </div>
 
         @if ($integrationToken->provider === 'infisical')
@@ -30,6 +37,21 @@
                 <x-forms.input id="metadata.namespace" label="Namespace (optional)" />
                 <x-forms.input type="number" min="1" max="300" id="metadata.timeout" label="Request timeout (optional)"
                     placeholder="10" helper="Seconds to wait for each request. Increase it if your instance responds slowly." />
+            </div>
+        @elseif ($integrationToken->provider === 'aws_secrets_manager')
+            <div class="grid gap-4 lg:grid-cols-2">
+                <x-forms.input required id="metadata.region" label="Region" placeholder="us-east-1" />
+                @if ($this->canUseAwsHostCredentials || data_get($metadata, 'credential_source') === 'host')
+                    <x-forms.listbox id="metadata.credential_source" label="Credentials" :live="true" :options="[
+                        ['value' => 'access_key', 'label' => 'Access key'],
+                        ['value' => 'host', 'label' => 'Credentials of the Coolify host (IAM role)'],
+                    ]" />
+                @endif
+                @if (data_get($metadata, 'credential_source') !== 'host')
+                    <x-forms.input required id="metadata.access_key_id" label="Access key ID" />
+                @endif
+                <x-forms.input type="number" min="1" max="300" id="metadata.timeout" label="Request timeout (optional)"
+                    placeholder="10" helper="Seconds to wait for each request." />
             </div>
         @endif
 
